@@ -9,6 +9,7 @@ from os import getenv
 from os import getcwd
 from pathlib import Path
 from dotenv import load_dotenv
+# from dataclasses import dataclass
 
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
@@ -54,6 +55,7 @@ def download_course(driver, table, course):
         this_row = table_row.find_elements(By.CSS_SELECTOR, 'td')
         test = ingest_exam_row(this_row, course)
         if test not in downloaded_exams:
+            assert test['year'] == re.sub("[^0-9]", "", this_row[5].text)
             download_exam(driver, this_row, test)
             downloaded_exams.append(test)
             # close_windows(driver)
@@ -79,6 +81,12 @@ def ingest_exam_row(row, course):
         "sem": row[6].text,
         "sitting": row[7].text
     }
+    print(f"test: {test}")
+    for i, r in enumerate(row):
+        print(f"row {i}: {r.text}", end=", ")
+    print()
+    if test["year"] == '2021':
+        print("fuck")
     if 'א' in test['sem']:
         test['sem'] = 1
     elif 'ב' in test['sem']:
@@ -92,6 +100,7 @@ def download_exam(driver, this_row, test):
     """From a given table row, Downloads the tests"""
     cur_path = f"{getcwd()}/output/{test['course']}/{test['year']}/{test['sem']}"
     Path(cur_path).mkdir(parents=True, exist_ok=True)
+    logger(f"path: {Path(cur_path).resolve()}, test obj: {test}")
     download_source = ""
     download_btn_cell = this_row[9].find_elements(
         By.CSS_SELECTOR, 'input[value="הורדה"]')
@@ -105,7 +114,7 @@ def download_exam(driver, this_row, test):
             By.CSS_SELECTOR, 'input[value="קבצים נוספים"]')
         driver.execute_script(
             "arguments[0].click();", secondary_page_download_btn[0])
-        secondary_page_download(driver,cur_path)
+        secondary_page_download(driver, cur_path)
     logger(
         f"Downloaded from {download_source}: {test['course']} - {test['year']} / {test['sem']} / {test['sitting']}")
     driver.switch_to.window(driver.window_handles[0])
@@ -123,21 +132,25 @@ def move_exam_to_folder(folder):
         for file in file_list:
             if file.suffix == '.part':
                 ready_to_move = False
-        if timestamp() - start > 10:
+        if timestamp() - start > 25:
+            logger("Move failed (timeout)")
             break
     file_list = sorted(Path('temp').glob(f"*"))
     for file in file_list:
+        logger(f"rename {file} to {folder}/{file.name}")
         file.rename(f"{folder}/{file.name}")
 
-def secondary_page_download(driver,folder):
+
+def secondary_page_download(driver, folder):
     """Downloads exam files from a secondary page"""
     window_before = driver.window_handles[0]
     window_after = driver.window_handles[len(driver.window_handles)-1]
     driver.switch_to.window(window_after)
     waitfor(driver, By.XPATH, "//h2[contains(text(),'אודות הקורס')]")
-    download_btn = driver.find_elements( 
+    download_btn = driver.find_elements(
         By.XPATH, "//button[contains(text(),'קישור לקובץ')]")
-    if len(download_btn) < 1: return False
+    if len(download_btn) < 1:
+        return False
     for btn in download_btn:
         driver.execute_script("arguments[0].click();", btn)
         move_exam_to_folder(folder)
@@ -196,11 +209,12 @@ def set_firefox_options():
     options.set_preference("browser.download.dir", f"{getcwd()}/temp")
     options.set_preference("browser.download.folderList", 2)
     options.set_preference("browser.helperApps.neverAsk.saveToDisk",
-                            "Application/pdf, application/msword, \
+                           "Application/pdf, application/msword, \
                             application/vnd.openxmlformats-officedocument.wordprocessingml.document,\
                             application/vnd.ms-excel, \
                             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    options.set_preference("browser.download.viewableInternally.enabledTypes","")
+    options.set_preference(
+        "browser.download.viewableInternally.enabledTypes", "")
     options.set_preference("browser.download.manager.showWhenStarting", False)
     options.set_preference("dom.disable_open_during_load", False)
     return options
