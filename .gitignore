@@ -3,4 +3,4 @@
 geckodriver.log
 output/
 temp/
-scrpr.log
+scrpr.log*
